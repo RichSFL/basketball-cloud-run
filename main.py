@@ -16,5 +16,6 @@ def projections():
     return jsonify({"message": "Projections endpoint", "data": []}), 200
 
 if __name__ == '__main__':
+    # This is only for local development
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
