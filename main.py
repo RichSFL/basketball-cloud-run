@@ -2,17 +2,23 @@
 from flask import Flask, jsonify
 import os
 import logging
+from api_client import fetch_games
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DISCORD_WEBHOOK = os.getenv('DISCORD_WEBHOOK', '')
-API_TOKEN = os.getenv('API_TOKEN', '')
 
 @app.route('/', methods=['GET'])
 def health():
     return jsonify({"status": "healthy", "service": "basketball-projections"}), 200
+
+@app.route('/games', methods=['GET'])
+def games():
+    """Fetch live games from API"""
+    games_list = fetch_games()
+    return jsonify({"games": games_list, "count": len(games_list)}), 200
 
 @app.route('/projections', methods=['GET'])
 def projections():
