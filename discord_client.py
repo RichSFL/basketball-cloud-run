@@ -1,31 +1,50 @@
-"""Discord webhook client"""
+"""Discord integration"""
 import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
 class DiscordClient:
+    """Send messages to Discord"""
+    
     def __init__(self, webhook_url):
         self.webhook_url = webhook_url
     
-    def send_message(self, title, description, color=3447003):
-        """Send embedded message to Discord"""
+    def send_message(self, message):
+        """Send text message to Discord"""
+        if not self.webhook_url:
+            logger.warning("Discord webhook not configured")
+            return False
+        
+        try:
+            payload = {"content": message}
+            response = requests.post(self.webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            logger.info("✅ Discord message sent")
+            return True
+        except Exception as e:
+            logger.error(f"Discord error: {e}")
+            return False
+    
+    def send_embed(self, title, description, fields=None):
+        """Send embed to Discord"""
+        if not self.webhook_url:
+            return False
+        
         try:
             embed = {
                 "title": title,
                 "description": description,
-                "color": color
+                "color": 3447003
             }
+            if fields:
+                embed["fields"] = fields
+            
             payload = {"embeds": [embed]}
             response = requests.post(self.webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             return True
         except Exception as e:
-            logger.error(f"Error sending Discord message: {e}")
+            logger.error(f"Discord embed error: {e}")
             return False
-    
-    def send_projection_alert(self, player_name, projection, betting_line):
-        """Send projection alert"""
-        title = f"🏀 {player_name} Projection"
-        description = f"**Projection:** {projection}\n**Line:** {betting_line}"
-        return self.send_message(title, description)
+
