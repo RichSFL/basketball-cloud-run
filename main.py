@@ -3,12 +3,16 @@ from flask import Flask, jsonify
 import os
 import logging
 from api_client import fetch_games
+from firestore_manager import FirestoreManager
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DISCORD_WEBHOOK = os.getenv('DISCORD_WEBHOOK', '')
+GCS_PROJECT = os.getenv('GCS_PROJECT', 'basketball-projections-python')
+
+fs = FirestoreManager(GCS_PROJECT)
 
 @app.route('/', methods=['GET'])
 def health():
@@ -16,9 +20,13 @@ def health():
 
 @app.route('/games', methods=['GET'])
 def games():
-    """Fetch live games from API"""
+    """Fetch and save live games"""
     games_list = fetch_games()
-    return jsonify({"games": games_list, "count": len(games_list)}), 200
+    saved = 0
+    for game in games_list:
+        if fs.save_game(game):
+            saved += 1
+    return jsonify({"games": games_list, "count": len(games_list), "saved": saved}), 200
 
 @app.route('/projections', methods=['GET'])
 def projections():
