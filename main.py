@@ -160,6 +160,14 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
         tracked_game["final_report_sent"] = True
         tracked_game.clear()
 
+@app.route("/")
+def index():
+    return jsonify({"msg": "Basketball projections API is running."})
+
+@app.route("/projections")
+def projections():
+    return jsonify({"ok": True, "tracked_game": tracked_game})
+
 @app.route("/tick")
 def tick():
     try:
