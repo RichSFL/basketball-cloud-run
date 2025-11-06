@@ -181,3 +181,25 @@ def tick():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+
+@app.route("/test-alert")
+def test_alert():
+    discord.send_message("Test Alert: Discord connection working!")
+    return jsonify({"ok": True})
+
+@app.route("/test-embed")
+def test_embed():
+    fake_game = {
+        'home': {'name': 'Test Home'}, 
+        'away': {'name': 'Test Away'}
+    }
+    embed_data = build_game_embed(
+        fake_game, 50, 47, 97, 4, 1, 12,
+        100, 98, 90, 92, 190, 188,
+        110, 110, 110,
+        "⚡ HEATING UP", "📉 SLOWING DOWN", "⚠️ CAUTION",
+        10
+    )
+    discord.send_embed(**embed_data)
+    return jsonify({"ok": True})
+
