@@ -2,19 +2,27 @@
 from flask import Flask, jsonify
 import os
 import logging
-from datetime import datetime, timezone, timedelta
+import time
 from api_client import fetch_games
 from firestore_manager import FirestoreManager
-from discord_client import DiscordClient
+from discord_client import DiscordClient, build_game_embed
 from projections import ProjectionEngine
-from discord_client import build_game_embed
-import time
-import datetime
+
+app = Flask(__name__)
 
 # ---- GLOBAL state, for one slot (replace with Firestore later)
 tracked_game = {}      # holds gameId, state, etc.
 ALERT_THRESHOLD_POINTS = 5
 ALERT_MIN_INTERVAL = 30   # seconds
+
+# Configure logger for better visibility
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("basketball_main")
+
+DISCORD_WEBHOOK = os.getenv('DISCORD_WEBHOOK', '')
+if not DISCORD_WEBHOOK:
+    logger.warning("DISCORD_WEBHOOK environment variable not set!")
+discord = DiscordClient(DISCORD_WEBHOOK)
 
 def process_tracked_slot_one(games, discord, odds_fetcher):
     global tracked_game
@@ -37,21 +45,24 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
                     "final_report_sent": False,
                     "full_state": {},
                 }
+                logger.info(f"Now tracking game: {g['id']}")
                 break
         return  # If not found, wait till next tick
 
     # 2. FIND MATCHING GAME IN LIVE DATA
     game = next((g for g in games if g['id'] == tracked_game['id']), None)
     if not game:
-        return  # In prod: handle removal, clean-up, alert
+        logger.warning("Tracked game not found in live games!")
+        return
 
     # 3. CORE LOGIC (PORTED FROM PROCESSGAME)
     # -- scores/time
     try:
         home_score, away_score = map(int, game['ss'].split('-'))
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to parse score for game {tracked_game['id']}: {e}")
         return
-    
+
     q = int(game['timer']['q'])
     m = int(game['timer']['tm'])
     s = int(game['timer']['ts'])
@@ -63,6 +74,7 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
         tracked_game["missed_cycles"] += 1
         if tracked_game["missed_cycles"] > 8 and q <= 2:
             discord.send_message(f"Game stalled (Q{q}, no update 8 cycles), releasing slot.")
+            logger.info("Releasing stalled game slot.")
             tracked_game.clear()
         return
     tracked_game["last_stamp"] = stamp
@@ -98,11 +110,8 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
     away_avg = engine.project_points_from_samples(tracked_game["samples"]["away"])
     total_avg = engine.project_points_from_samples(tracked_game["samples"]["total"])
     
-
-    
-
     # Dummy values for line/reliability/momentum (replace with your own logic as needed)
-    home_line = total_line = away_line = 110  # TODO: replace with real odds
+    home_line = total_line = away_line = 110
     reliability = "⚠️ CAUTION"
     home_momentum = "📉 SLOWING DOWN"
     away_momentum = "⚡ HEATING UP"
@@ -123,6 +132,7 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
             home_momentum, away_momentum, reliability,
             len(tracked_game["samples"]["total"])
         )
+        logger.info(f"Sending Q4 betting decision: {rec}")
         discord.send_embed(**embed)
         tracked_game["decision_complete"] = True
         tracked_game["last_alert"] = now
@@ -137,12 +147,29 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
             home_momentum, away_momentum, reliability,
             len(tracked_game["samples"]["total"])
         )
+        logger.info(f"Sending alert (Q{q}, t={m:02}:{s:02}, total_samples={len(tracked_game['samples']['total'])})")
         discord.send_embed(**embed)
         tracked_game["last_alert"] = now
         return
 
     # GAME END (Q4 0:00, not tied)
     if q == 4 and m == 0 and s == 0 and home_score != away_score and not tracked_game.get("final_report_sent"):
-        discord.send_message(f"🏁 FINAL: {game['home']['name']} vs. {game['away']['name']} ended {home_score}-{away_score} (Total: {total_score})")
+        msg = f"🏁 FINAL: {game['home']['name']} vs. {game['away']['name']} ended {home_score}-{away_score} (Total: {total_score})"
+        logger.info("Sending final report.")
+        discord.send_message(msg)
         tracked_game["final_report_sent"] = True
         tracked_game.clear()
+
+@app.route("/tick")
+def tick():
+    try:
+        games = fetch_games()
+        odds_fetcher = None  # Implement as needed
+        process_tracked_slot_one(games, discord, odds_fetcher)
+        return jsonify({"ok": True, "tracked_game": tracked_game})
+    except Exception as e:
+        logger.exception("Error in /tick")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
