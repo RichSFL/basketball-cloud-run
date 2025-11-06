@@ -69,6 +69,10 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
     stamp = f"{q}-{m}-{s}"
     total_score = home_score + away_score
 
+    logger.info(f"Tracking: id={tracked_game['id']}, q={q}, m={m}, s={s}, scores: {home_score}-{away_score}, played={played}")
+    logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game['samples']['away']} total={tracked_game['samples']['total']}")
+
+
     # STALE/NO UPDATE DETECTION
     if tracked_game["last_stamp"] == stamp:
         tracked_game["missed_cycles"] += 1
