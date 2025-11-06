@@ -27,36 +27,36 @@ discord = DiscordClient(DISCORD_WEBHOOK)
 def process_tracked_slot_one(games, discord, odds_fetcher):
     global tracked_game
     now = int(time.time())
-    
-   # 1. TRACK OR SELECT GAME
-if not tracked_game.get("id"):
-    for g in games:
-        # Defensive check for timer data
-        timer = g.get('timer')
-        if not timer or 'q' not in timer:
-            logger.warning(f"Game missing timer/q: {g}")
-            continue
-        try:
-            q = int(timer['q'])
-        except Exception as e:
-            logger.warning(f"Invalid quarter in timer for game {g}: {e}")
-            continue
-        # Pick a Q1 or Q2 game not being tracked already
-        if q == 1 or q == 2:
-            tracked_game = {
-                "id": g['id'],
-                "samples": {"home": [], "away": [], "total": []},
-                "last_stamp": "",
-                "missed_cycles": 0,
-                "betting_window_fired": False,
-                "decision_complete": False,
-                "last_alert": 0,
-                "final_report_sent": False,
-                "full_state": {},
-            }
-            logger.info(f"Now tracking game: {g['id']}")
-            break
-    return  # If not found, wait till next tick
+
+    # 1. TRACK OR SELECT GAME
+    if not tracked_game.get("id"):
+        for g in games:
+            # Defensive check for timer data
+            timer = g.get('timer')
+            if not timer or 'q' not in timer:
+                logger.warning(f"Game missing timer/q: {g}")
+                continue
+            try:
+                q = int(timer['q'])
+            except Exception as e:
+                logger.warning(f"Invalid quarter in timer for game {g}: {e}")
+                continue
+            # Pick a Q1 or Q2 game not being tracked already
+            if q == 1 or q == 2:
+                tracked_game = {
+                    "id": g['id'],
+                    "samples": {"home": [], "away": [], "total": []},
+                    "last_stamp": "",
+                    "missed_cycles": 0,
+                    "betting_window_fired": False,
+                    "decision_complete": False,
+                    "last_alert": 0,
+                    "final_report_sent": False,
+                    "full_state": {},
+                }
+                logger.info(f"Now tracking game: {g['id']}")
+                break
+        return  # If not found, wait till next tick
 
     # 2. FIND MATCHING GAME IN LIVE DATA
     game = next((g for g in games if g['id'] == tracked_game['id']), None)
@@ -65,38 +65,37 @@ if not tracked_game.get("id"):
         return
 
     # 3. CORE LOGIC (PORTED FROM PROCESSGAME)
-# -- scores/time
+    ss = game.get('ss')
+    if not ss or '-' not in ss:
+        logger.warning(f"Game missing or invalid ss (score): {game}")
+        return
 
-ss = game.get('ss')
-if not ss or '-' not in ss:
-    logger.warning(f"Game missing or invalid ss (score): {game}")
-    return
+    try:
+        home_score, away_score = map(int, ss.split('-'))
+    except Exception as e:
+        logger.error(f"Failed to parse score for game {tracked_game.get('id')}: {e}")
+        return
 
-try:
-    home_score, away_score = map(int, ss.split('-'))
-except Exception as e:
-    logger.error(f"Failed to parse score for game {tracked_game.get('id')}: {e}")
-    return
+    timer = game.get('timer')
+    if not timer or not all(k in timer for k in ['q', 'tm', 'ts']):
+        logger.warning(f"Game missing timer/q/tm/ts: {game}")
+        return
 
-timer = game.get('timer')
-if not timer or not all(k in timer for k in ['q', 'tm', 'ts']):
-    logger.warning(f"Game missing timer/q/tm/ts: {game}")
-    return
+    try:
+        q = int(timer['q'])
+        m = int(timer['tm'])
+        s = int(timer['ts'])
+    except Exception as e:
+        logger.warning(f"Invalid timer values for game {game}: {e}")
+        return
 
-try:
-    q = int(timer['q'])
-    m = int(timer['tm'])
-    s = int(timer['ts'])
-except Exception as e:
-    logger.warning(f"Invalid timer values for game {game}: {e}")
-    return
+    stamp = f"{q}-{m}-{s}"
+    total_score = home_score + away_score
 
-stamp = f"{q}-{m}-{s}"
-total_score = home_score + away_score
+    played = (q-1)*300 + (300 - (m*60+s))
 
-logger.info(f"Tracking: id={tracked_game.get('id')}, q={q}, m={m}, s={s}, scores: {home_score}-{away_score}, played={played}")
-logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game['samples']['away']} total={tracked_game['samples']['total']}")
-
+    logger.info(f"Tracking: id={tracked_game.get('id')}, q={q}, m={m}, s={s}, scores: {home_score}-{away_score}, played={played}")
+    logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game['samples']['away']} total={tracked_game['samples']['total']}")
 
     # STALE/NO UPDATE DETECTION
     if tracked_game["last_stamp"] == stamp:
@@ -114,7 +113,6 @@ logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game
         return
 
     # SAMPLES
-    played = (q-1)*300 + (300 - (m*60+s))
     if played <= 0:
         return
 
@@ -124,21 +122,21 @@ logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game
     home_pps = engine.calculate_pps(home_score, played)
     away_pps = engine.calculate_pps(away_score, played)
     total_pps = engine.calculate_pps(total_score, played)
-    
+
     # Store samples as before
     tracked_game["samples"]["home"].append(home_pps)
     tracked_game["samples"]["away"].append(away_pps)
     tracked_game["samples"]["total"].append(total_pps)
-    
+
     # Use engine to calculate raw and averaged projections
     home_raw = engine.project_points(home_score, played)
     away_raw = engine.project_points(away_score, played)
     total_raw = engine.project_points(total_score, played)
-    
+
     home_avg = engine.project_points_from_samples(tracked_game["samples"]["home"])
     away_avg = engine.project_points_from_samples(tracked_game["samples"]["away"])
     total_avg = engine.project_points_from_samples(tracked_game["samples"]["total"])
-    
+
     # Dummy values for line/reliability/momentum (replace with your own logic as needed)
     home_line = total_line = away_line = 110
     reliability = "⚠️ CAUTION"
@@ -208,9 +206,6 @@ def tick():
         logger.exception("Error in /tick")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
-
 @app.route("/test-alert")
 def test_alert():
     discord.send_message("Test Alert: Discord connection working!")
@@ -232,3 +227,5 @@ def test_embed():
     discord.send_embed(**embed_data)
     return jsonify({"ok": True})
 
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
