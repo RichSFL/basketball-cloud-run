@@ -76,7 +76,9 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
     played = (q-1)*300 + (300 - (m*60+s))
     if played <= 0:
         return
-    
+
+    engine = ProjectionEngine()
+
     # Instead of inline calculations, use your ProjectionEngine:
     home_pps = engine.calculate_pps(home_score, played)
     away_pps = engine.calculate_pps(away_score, played)
