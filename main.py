@@ -65,21 +65,37 @@ if not tracked_game.get("id"):
         return
 
     # 3. CORE LOGIC (PORTED FROM PROCESSGAME)
-    # -- scores/time
-    try:
-        home_score, away_score = map(int, game['ss'].split('-'))
-    except Exception as e:
-        logger.error(f"Failed to parse score for game {tracked_game['id']}: {e}")
-        return
+# -- scores/time
 
-    q = int(game['timer']['q'])
-    m = int(game['timer']['tm'])
-    s = int(game['timer']['ts'])
-    stamp = f"{q}-{m}-{s}"
-    total_score = home_score + away_score
+ss = game.get('ss')
+if not ss or '-' not in ss:
+    logger.warning(f"Game missing or invalid ss (score): {game}")
+    return
 
-    logger.info(f"Tracking: id={tracked_game['id']}, q={q}, m={m}, s={s}, scores: {home_score}-{away_score}, played={played}")
-    logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game['samples']['away']} total={tracked_game['samples']['total']}")
+try:
+    home_score, away_score = map(int, ss.split('-'))
+except Exception as e:
+    logger.error(f"Failed to parse score for game {tracked_game.get('id')}: {e}")
+    return
+
+timer = game.get('timer')
+if not timer or not all(k in timer for k in ['q', 'tm', 'ts']):
+    logger.warning(f"Game missing timer/q/tm/ts: {game}")
+    return
+
+try:
+    q = int(timer['q'])
+    m = int(timer['tm'])
+    s = int(timer['ts'])
+except Exception as e:
+    logger.warning(f"Invalid timer values for game {game}: {e}")
+    return
+
+stamp = f"{q}-{m}-{s}"
+total_score = home_score + away_score
+
+logger.info(f"Tracking: id={tracked_game.get('id')}, q={q}, m={m}, s={s}, scores: {home_score}-{away_score}, played={played}")
+logger.info(f"Samples: home={tracked_game['samples']['home']} away={tracked_game['samples']['away']} total={tracked_game['samples']['total']}")
 
 
     # STALE/NO UPDATE DETECTION
