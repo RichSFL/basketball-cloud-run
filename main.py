@@ -28,26 +28,35 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
     global tracked_game
     now = int(time.time())
     
-    # 1. TRACK OR SELECT GAME
-    if not tracked_game.get("id"):
-        for g in games:
-            # Pick a Q1 or Q2 game not being tracked already
-            q = int(g['timer']['q'])
-            if q == 1 or q == 2:
-                tracked_game = {
-                    "id": g['id'],
-                    "samples": {"home": [], "away": [], "total": []},
-                    "last_stamp": "",
-                    "missed_cycles": 0,
-                    "betting_window_fired": False,
-                    "decision_complete": False,
-                    "last_alert": 0,
-                    "final_report_sent": False,
-                    "full_state": {},
-                }
-                logger.info(f"Now tracking game: {g['id']}")
-                break
-        return  # If not found, wait till next tick
+   # 1. TRACK OR SELECT GAME
+if not tracked_game.get("id"):
+    for g in games:
+        # Defensive check for timer data
+        timer = g.get('timer')
+        if not timer or 'q' not in timer:
+            logger.warning(f"Game missing timer/q: {g}")
+            continue
+        try:
+            q = int(timer['q'])
+        except Exception as e:
+            logger.warning(f"Invalid quarter in timer for game {g}: {e}")
+            continue
+        # Pick a Q1 or Q2 game not being tracked already
+        if q == 1 or q == 2:
+            tracked_game = {
+                "id": g['id'],
+                "samples": {"home": [], "away": [], "total": []},
+                "last_stamp": "",
+                "missed_cycles": 0,
+                "betting_window_fired": False,
+                "decision_complete": False,
+                "last_alert": 0,
+                "final_report_sent": False,
+                "full_state": {},
+            }
+            logger.info(f"Now tracking game: {g['id']}")
+            break
+    return  # If not found, wait till next tick
 
     # 2. FIND MATCHING GAME IN LIVE DATA
     game = next((g for g in games if g['id'] == tracked_game['id']), None)
