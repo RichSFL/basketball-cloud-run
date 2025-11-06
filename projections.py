@@ -143,3 +143,19 @@ class ProjectionEngine:
         """Check if leader is on fire"""
         return self.analyze_momentum(samples) == "ON_FIRE"
 
+
+    def project_points(self, current_score, seconds_played):
+        """Project points for full game based on current score and time played"""
+        if seconds_played <= 0:
+            return 0
+        pps = current_score / seconds_played
+        return round(pps * self.GAME_SECONDS, 1)
+
+    def project_points_from_samples(self, samples):
+        """Project points from average PPS of samples"""
+        if not samples:
+            return 0
+        avg_pps = statistics.mean(samples)
+        return round(avg_pps * self.GAME_SECONDS, 1)
+
+
