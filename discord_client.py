@@ -47,8 +47,9 @@ class DiscordClient:
         except Exception as e:
             logger.error(f"Discord embed error: {e}")
             return False
-            
-        def build_game_embed(game, home_score, away_score, total_score, q, m, s,
+
+# --- The following function MUST be OUTSIDE the class! ---
+def build_game_embed(game, home_score, away_score, total_score, q, m, s,
                     home_raw, home_avg, away_raw, away_avg, total_raw, total_avg,
                     home_line, away_line, total_line,
                     home_momentum, away_momentum, reliability, samples):
@@ -92,5 +93,3 @@ class DiscordClient:
         "description": description,
         "fields": fields
     }
-
-
