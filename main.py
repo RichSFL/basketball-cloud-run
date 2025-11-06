@@ -76,20 +76,28 @@ def process_tracked_slot_one(games, discord, odds_fetcher):
     played = (q-1)*300 + (300 - (m*60+s))
     if played <= 0:
         return
-    home_pps = home_score / played
-    away_pps = away_score / played
-    total_pps = total_score / played
-
+    
+    # Instead of inline calculations, use your ProjectionEngine:
+    home_pps = engine.calculate_pps(home_score, played)
+    away_pps = engine.calculate_pps(away_score, played)
+    total_pps = engine.calculate_pps(total_score, played)
+    
+    # Store samples as before
     tracked_game["samples"]["home"].append(home_pps)
     tracked_game["samples"]["away"].append(away_pps)
     tracked_game["samples"]["total"].append(total_pps)
+    
+    # Use engine to calculate raw and averaged projections
+    home_raw = engine.project_points(home_score, played)
+    away_raw = engine.project_points(away_score, played)
+    total_raw = engine.project_points(total_score, played)
+    
+    home_avg = engine.project_points_from_samples(tracked_game["samples"]["home"])
+    away_avg = engine.project_points_from_samples(tracked_game["samples"]["away"])
+    total_avg = engine.project_points_from_samples(tracked_game["samples"]["total"])
+    
 
-    home_raw = round(home_pps * 1200, 1)
-    away_raw = round(away_pps * 1200, 1)
-    total_raw = round(total_pps * 1200, 1)
-    home_avg = round(sum(tracked_game["samples"]["home"]) / len(tracked_game["samples"]["home"]) * 1200, 1)
-    away_avg = round(sum(tracked_game["samples"]["away"]) / len(tracked_game["samples"]["away"]) * 1200, 1)
-    total_avg = round(sum(tracked_game["samples"]["total"]) / len(tracked_game["samples"]["total"]) * 1200, 1)
+    
 
     # Dummy values for line/reliability/momentum (replace with your own logic as needed)
     home_line = total_line = away_line = 110  # TODO: replace with real odds
